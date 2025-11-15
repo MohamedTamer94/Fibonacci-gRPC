@@ -160,6 +160,48 @@ Get Stats:
 curl "http://localhost:3002/stats"
 ```
 
+## Code Highlights
+
+- Thread-safe cache:
+  ```go
+  var fibCache = map[int]int{0:0, 1:1}
+  var mu sync.RWMutex
+
+  func Fib(n int) int {
+    mu.RLock()
+    cached, ok := fibCache[n]
+    mu.RUnlock()
+    if ok {
+        return cached
+    }
+    mu.Lock()
+    for i := 2; i <= n; i++ {
+        if _, exists := fibCache[i]; !exists {
+            fibCache[i] = fibCache[i-1] + fibCache[i-2]
+        }
+    }
+    result := fibCache[n]
+    mu.Unlock()
+    return result
+  }
+  ```
+- Fire-and-forget stats update with retries:
+  ```go
+  go func(n int, dur time.Duration) {
+    err := RetryGRPC(3, 100*time.Millisecond, func() error {
+        ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+        defer cancel()
+        _, err := statsClient.RecordNo(ctx, &statsPb.RecordRequest{
+            N: int32(n),
+            Duration: dur.Nanoseconds(),
+        })
+        return err
+    })
+    if err != nil {
+        log.Printf("Failed to record stats for n=%d: %v", n, err)
+    }
+  }(n, duration)
+  ```
 
 ## Potential Improvements
 
