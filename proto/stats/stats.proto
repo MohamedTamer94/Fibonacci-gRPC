@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+// Package stats provides a gRPC service for recording and retrieving
+// statistics of Fibonacci number requests.
+package stats;
+
+import "google/protobuf/empty.proto";
+
+// Go package option for generating Go code.
+option go_package = "fibonacci-grpc/proto/stats;statspb";
+
+// Stats defines the gRPC service for recording and retrieving statistics.
+service Stats {
+    // RecordNo records a Fibonacci request with its computation duration.
+    rpc RecordNo(RecordRequest) returns (RecordResponse);
+
+    // GetStats returns aggregated statistics for all Fibonacci requests.
+    rpc GetStats(google.protobuf.Empty) returns (StatsResponse);
+}
+
+// StatsResponse represents aggregated statistics for Fibonacci requests.
+message StatsResponse {
+    int32 total_requests = 1;               // Total number of requests received
+    repeated FibonacciStat fibonacci_stats = 2; // Per-number statistics
+}
+
+// FibonacciStat contains statistics for a single Fibonacci number.
+message FibonacciStat {
+    int32 n = 1;                // Fibonacci number requested
+    int32 request_count = 2;    // How many times it was requested
+    double average_time_ms = 3; // Average computation time in milliseconds
+}
+
+// RecordRequest represents a request to record a Fibonacci computation.
+message RecordRequest {
+    int32 n = 1;          // Fibonacci number requested
+    int64 duration = 2;   // Computation duration in nanoseconds
+}
+
+// RecordResponse indicates whether recording the request succeeded.
+message RecordResponse {
+    bool success = 1;     // True if recording succeeded
+}

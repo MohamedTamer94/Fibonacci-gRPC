@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+// Package fibonacci provides a gRPC service for calculating Fibonacci numbers.
+package fibonacci;
+
+// Go package option for generating Go code.
+option go_package = "fibonacci-grpc/proto/fibonacci;fibonaccipb";
+
+// Fibonacci defines the gRPC service for computing Fibonacci numbers.
+service Fibonacci {
+    // GetFib returns the Fibonacci number for a given input 'n'.
+    rpc GetFib(FibonacciRequest) returns (FibonacciResponse);
+}
+
+// FibonacciRequest represents a request to compute the Fibonacci number.
+message FibonacciRequest {
+    int32 n = 1; // Input number (must be non-negative and <= 92)
+}
+
+// FibonacciResponse represents the response with the Fibonacci result.
+message FibonacciResponse {
+    int64 x = 1; // Computed Fibonacci number
+}
