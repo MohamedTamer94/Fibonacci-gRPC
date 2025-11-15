@@ -30,6 +30,33 @@ var (
 	mu       sync.RWMutex
 )
 
+func RetryGRPC(maxRetries int, baseDelay time.Duration, f func() error) error {
+    var err error
+    delay := baseDelay
+
+    for i := 0; i <= maxRetries; i++ {
+        err = f()
+        if err == nil {
+            return nil
+        }
+
+        // Check if error is retryable
+        st, ok := status.FromError(err)
+        if !ok {
+            return err // non-gRPC error
+        }
+        if st.Code() != codes.Unavailable && st.Code() != codes.DeadlineExceeded {
+            return err // permanent error, don't retry
+        }
+
+        // Retry after delay
+        time.Sleep(delay)
+        delay *= 2 // exponential backoff
+    }
+
+    return err // return last error if all retries fail
+}
+
 // GetFib calculates the Fibonacci number for a given 'n'.
 // It returns an error if 'n' is greater than 92 to prevent int64 overflow.
 func (*fibonacciServer) GetFib(_ context.Context, r *pb.FibonacciRequest) (*pb.FibonacciResponse, error) {
@@ -47,16 +74,18 @@ func (*fibonacciServer) GetFib(_ context.Context, r *pb.FibonacciRequest) (*pb.F
 
 	// Fire-and-forget stats update
 	go func(n int, dur time.Duration) {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_, err := statsClient.RecordNo(ctx, &statsPb.RecordRequest{
-			N:        int32(n),
-			Duration: dur.Nanoseconds(),
+		err := RetryGRPC(3, 100*time.Millisecond, func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_, err := statsClient.RecordNo(ctx, &statsPb.RecordRequest{
+				N:        int32(n),
+				Duration: dur.Nanoseconds(),
+			})
+			return err
 		})
 		if err != nil {
+			// optional: log the error
 			log.Printf("Failed to record stats for n=%d: %v", n, err)
-		} else {
-			log.Printf("Recorded stats for n=%d, duration=%v", n, dur)
 		}
 	}(n, duration)
 
