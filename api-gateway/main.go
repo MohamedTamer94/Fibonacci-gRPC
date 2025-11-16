@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -20,6 +22,11 @@ var client pb.FibonacciClient
 
 // statsClient is the gRPC client for the Stats service.
 var statsClient statsPb.StatsClient
+
+// command line flag for determining the port in which this app will run on ( used for load balancing tests )
+var (
+	portPtr = flag.Int("port", 3002, "specify the port that the app will run on")
+)
 
 // FibHandler handles HTTP requests to calculate the Fibonacci number for a given 'n'.
 // Example request: GET /fib?n=10
@@ -76,14 +83,16 @@ func StatsHandler(w http.ResponseWriter, r *http.Request) {
 
 // main initializes the gRPC clients and starts the HTTP API gateway server.
 func main() {
-	// Connect to Fibonacci gRPC service
-	conn, err := grpc.Dial(":5001", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// parse command-line flags
+	flag.Parse()
+	// Connect to Fibonacci gRPC service ( the load balancer made by nginx is available on 8081 as per as nginx.conf )
+	conn, err := grpc.NewClient(":8081", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Failed to connect to Fibonacci service: %v", err)
 	}
 	defer conn.Close()
 	client = pb.NewFibonacciClient(conn)
-	log.Println("Connected to Fibonacci gRPC service on :5001")
+	log.Println("Connected to Fibonacci gRPC service on :8081")
 
 	// Connect to Stats gRPC service
 	statsConn, statsErr := grpc.NewClient(":5002", grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -98,8 +107,8 @@ func main() {
 	http.HandleFunc("/fib", FibHandler)
 	http.HandleFunc("/stats", StatsHandler)
 
-	log.Println("API Gateway running on :3002")
-	if httpErr := http.ListenAndServe(":3002", nil); httpErr != nil {
+	log.Printf("API Gateway running on :%d\n", *portPtr)
+	if httpErr := http.ListenAndServe(fmt.Sprintf(":%d", *portPtr), nil); httpErr != nil {
 		log.Fatalf("Failed to start HTTP server: %v", httpErr)
 	}
 }

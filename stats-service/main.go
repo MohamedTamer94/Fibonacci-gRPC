@@ -63,8 +63,8 @@ func (s *statsService) GetStats(_ context.Context, in *emptypb.Empty) (*pb.Stats
 	for _, n := range keys {
 		count := s.stats.RequestCount[n]
 		res = append(res, &pb.FibonacciStat{
-			N:            int32(n),
-			RequestCount: int32(count),
+			N:             int32(n),
+			RequestCount:  int32(count),
 			AverageTimeMs: float64(s.stats.TotalTime[n].Milliseconds()) / float64(count),
 		})
 	}
