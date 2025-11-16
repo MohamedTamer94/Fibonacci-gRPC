@@ -15,7 +15,7 @@ It consists of three main components:
 The system showcases:
 
 - **gRPC unary RPCs** for service communication
-- **In-memory caching** with thread-safe access
+- **Redis Caching** with TTL ( for testing )
 - **Fire-and-forget asynchronous stats updates**
 - **Concurrency and mutex handling**
 - **Retry logic for transient network failures**
@@ -48,7 +48,7 @@ The system showcases:
 
 1. Client calls `/fib?n=10` → API Gateway.
 2. API Gateway forwards gRPC request to Fibonacci Service.
-3. Fibonacci Service computes the number (or retrieves from cache).
+3. Fibonacci Service computes the number (or retrieves from redis cache).
 4. Fibonacci Service sends **asynchronous stats update** to Stats Service.
 5. Stats Service records total requests, per-number request counts, and average computation times.
 6. Client receives JSON response.
@@ -57,7 +57,7 @@ The system showcases:
 
 ## Features
 
-- **Thread-safe in-memory caching** for fast Fibonacci computation
+- **Redis caching** for fast Fibonacci computation
 - **Stats collection**: total requests, per-number request count, average computation time
 - **Fire-and-forget stats updates** to minimize response latency
 - **Retries with exponential backoff** for transient network errors
@@ -123,6 +123,8 @@ message RecordResponse {
 
     protoc-gen-go and protoc-gen-go-grpc installed
 
+    Redis
+
 ### Run Services
 
   #### Stats Service
@@ -132,11 +134,13 @@ cd stats-service
 go run main.go
 ```
 
-  #### Fibonacci Service
+  #### Fibonacci Service (Run multiple instances to test load balancing )
 
 ```bash
 cd fibonacci-service
-go run main.go
+go run main.go --port=5001
+go run main.go --port=5003
+go run main.go --port=5005
 ```
 
   #### API Gateway
@@ -162,28 +166,34 @@ curl "http://localhost:3002/stats"
 
 ## Code Highlights
 
-- Thread-safe cache:
+- Redis cache:
   ```go
-  var fibCache = map[int]int{0:0, 1:1}
-  var mu sync.RWMutex
-
-  func Fib(n int) int {
-    mu.RLock()
-    cached, ok := fibCache[n]
-    mu.RUnlock()
-    if ok {
-        return cached
-    }
-    mu.Lock()
-    for i := 2; i <= n; i++ {
-        if _, exists := fibCache[i]; !exists {
-            fibCache[i] = fibCache[i-1] + fibCache[i-2]
-        }
-    }
-    result := fibCache[n]
-    mu.Unlock()
-    return result
-  }
+       cached, err := rdb.Get(ctx, cacheKey).Result()
+       if err == nil {
+              // Cache hit
+              log.Printf("Cache hit for Fib(%d) = %s", n, cached)
+              cachedI, convErr := strconv.ParseInt(cached, 10, 64)
+              if convErr != nil {
+                     log.Printf("Failed to parse cached value: %v", convErr)
+              } else {
+                     return int(cachedI)
+              }
+       } else if err == redis.Nil {
+              log.Printf("Cache miss for Fib(%d)", n)
+       } else {
+              log.Printf("Redis GET error: %v", err)
+       }
+       
+       // Cache miss → compute
+       a, b := 0, 1
+       for i := 2; i <= n; i++ {
+              a, b = b, a+b
+       }
+       // Store in Redis
+       if err := rdb.Set(ctx, cacheKey, b, 0).Err(); err != nil {
+              log.Printf("Failed to set cache: %v", err)
+       }
+       return b
   ```
 - Fire-and-forget stats update with retries:
   ```go
