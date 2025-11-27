@@ -6,6 +6,7 @@ import (
 	"net"
 	"sort"
 	"sync"
+	"os"
 	"time"
 
 	pb "fibonacci-grpc/proto/stats"
@@ -76,11 +77,12 @@ func (s *statsService) GetStats(_ context.Context, in *emptypb.Empty) (*pb.Stats
 	}, nil
 }
 
-// main starts the Stats gRPC server on port 5002.
+// main starts the Stats gRPC server on port 5001.
 func main() {
-	lis, err := net.Listen("tcp", ":5002")
+	port := os.Getenv("PORT")
+	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
-		log.Fatalf("Failed to listen on :5002: %v", err)
+		log.Fatalf("Failed to listen on :%s: %v", port, err)
 	}
 
 	server := grpc.NewServer()
@@ -92,7 +94,7 @@ func main() {
 
 	pb.RegisterStatsServer(server, &statsService{stats: defaultStats})
 
-	log.Println("Stats gRPC server running on :5002")
+	log.Printf("Stats gRPC server running on :%s\n", port)
 	if err := server.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve gRPC server: %v", err)
 	}

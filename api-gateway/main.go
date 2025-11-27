@@ -3,10 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
-	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -22,11 +21,6 @@ var client pb.FibonacciClient
 
 // statsClient is the gRPC client for the Stats service.
 var statsClient statsPb.StatsClient
-
-// command line flag for determining the port in which this app will run on ( used for load balancing tests )
-var (
-	portPtr = flag.Int("port", 3002, "specify the port that the app will run on")
-)
 
 // FibHandler handles HTTP requests to calculate the Fibonacci number for a given 'n'.
 // Example request: GET /fib?n=10
@@ -83,32 +77,40 @@ func StatsHandler(w http.ResponseWriter, r *http.Request) {
 
 // main initializes the gRPC clients and starts the HTTP API gateway server.
 func main() {
-	// parse command-line flags
-	flag.Parse()
+	// environment variable to determine the port that the app will run on
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "5002" // default
+	}
+	fibUrl := os.Getenv("FIBONACCI_SERVICE_URL")
+	statsUrl := os.Getenv("STATS_SERVICE_URL")
+	log.Printf("API Gateway starting on port :%s", port)
+	log.Printf("Fibonacci Service URL: %s", fibUrl)
+	log.Printf("Stats Service URL: %s", statsUrl)
 	// Connect to Fibonacci gRPC service ( the load balancer made by nginx is available on 8081 as per as nginx.conf )
-	conn, err := grpc.NewClient(":8081", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(fibUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Failed to connect to Fibonacci service: %v", err)
 	}
 	defer conn.Close()
 	client = pb.NewFibonacciClient(conn)
-	log.Println("Connected to Fibonacci gRPC service on :8081")
+	log.Printf("Connected to Fibonacci gRPC service on %s\n", fibUrl)
 
 	// Connect to Stats gRPC service
-	statsConn, statsErr := grpc.NewClient(":5002", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	statsConn, statsErr := grpc.NewClient(statsUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if statsErr != nil {
 		log.Fatalf("Failed to connect to Stats service: %v", statsErr)
 	}
 	defer statsConn.Close()
 	statsClient = statsPb.NewStatsClient(statsConn)
-	log.Println("Connected to Stats gRPC service on :5002")
+	log.Printf("Connected to Stats gRPC service on :%s\n", statsUrl)
 
 	// Register HTTP handlers
 	http.HandleFunc("/fib", FibHandler)
 	http.HandleFunc("/stats", StatsHandler)
 
-	log.Printf("API Gateway running on :%d\n", *portPtr)
-	if httpErr := http.ListenAndServe(fmt.Sprintf(":%d", *portPtr), nil); httpErr != nil {
+	log.Printf("API Gateway running on :%d\n", port)
+	if httpErr := http.ListenAndServe(":"+port, nil); httpErr != nil {
 		log.Fatalf("Failed to start HTTP server: %v", httpErr)
 	}
 }

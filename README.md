@@ -117,47 +117,56 @@ message RecordResponse {
 ## Getting Started
 ### Requirements
 
-    Go >= 1.21
-
-    protoc (Protocol Buffers compiler)
-
-    protoc-gen-go and protoc-gen-go-grpc installed
+- Go >= 1.21 (for local development)
+- protoc (Protocol Buffers compiler) if you regenerate protos locally
+- protoc-gen-go and protoc-gen-go-grpc (optional for local proto generation)
+- Docker & Docker Compose (recommended for running the whole system in containers)
 
 ### Run Services
 
-  #### Stats Service
+You can run the system either locally (development mode) or using Docker Compose (recommended for integration / deployment).
 
-```bash
-cd stats-service
-go run main.go
+Option A — run locally (development)
+
+1. Start each service in its folder using `go run`:
+
+```powershell
+cd stats-service; go run main.go
+cd fibonacci-service; go run main.go
+cd api-gateway; go run main.go
 ```
 
-  #### Fibonacci Service
+Option B — run with Docker Compose (recommended)
 
-```bash
-cd fibonacci-service
-go run main.go
+The repository includes Dockerfiles for each service and a `docker-compose.yaml` at the project root that brings up all services plus a Redis container used by the Fibonacci service.
+
+From the project root (where `docker-compose.yaml` lives), build and start everything with:
+
+```powershell
+# build images and start services in the foreground
+docker compose up --build
+
+# or run in detached/background mode
+docker compose up --build -d
 ```
 
-  #### API Gateway
+Notes:
+- The compose file exposes the API Gateway on port 3002 (host) mapped to 3002 (container).
+- Redis is provided as a separate container and mounted to a named volume (`redis-data`).
+- The services use the following ports inside the Docker network:
+  - fibonacci-service: 5001
+  - stats-service: 5002
 
-```bash
-cd api-gateway
-go run main.go
+To stop and tear down (removes containers, networks; keeps named volumes by default):
+
+```powershell
+docker compose down
 ```
 
-### Test the API
+To remove named volumes as well (e.g., to clear Redis data):
 
-Get Fibonacci number:
-
-```bash
-curl "http://localhost:3002/fib?n=10"
-```
-
-Get Stats:
-
-```bash
-curl "http://localhost:3002/stats"
+```powershell
+docker compose down -v
 ```
 
 ## Code Highlights
@@ -205,15 +214,15 @@ curl "http://localhost:3002/stats"
 
 ## Potential Improvements
 
-  - Server streaming Fibonacci sequences
+- Server streaming Fibonacci sequences
 
-  - Dockerize all services for easy deployment
+- Persistent stats storage (long-term storage for metrics: Redis/DB)
 
-  -  Persistent stats storage (Redis or database)
+- Advanced metrics (cache hit/miss, max/min duration, percentiles)
 
-  -  Advanced metrics (cache hit/miss, max/min duration)
+- Add mTLS / authentication between services
 
-  -  HTTP API with query parameters for streaming, batch requests
+Note: Docker Compose + Dockerfiles are included in the repository now so the whole stack can be run locally or in CI via the same containerized setup.
 
 ## License
 

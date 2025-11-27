@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net"
 	"strconv"
+	"os"
 	"time"
 
 	pb "fibonacci-grpc/proto/fibonacci"
@@ -27,11 +27,6 @@ type fibonacciServer struct {
 // statsClient is the gRPC client for sending statistics to the Stats service.
 var statsClient statsPb.StatsClient
 
-// command line flag for determining the port in which this app will run on ( used for load balancing tests )
-var (
-	portPtr = flag.Int("port", 5001, "specify the port that the app will run on")
-)
-
 // the client for redis; used for caching
 var rdb *redis.Client
 
@@ -41,7 +36,7 @@ var ctx = context.Background()
 // initialize the redis client
 func InitRedis() {
 	rdb = redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: "redis:6379",
 	})
 	_, err := rdb.Ping(ctx).Result()
 	if err != nil {
@@ -159,32 +154,31 @@ func Fib(n int) int {
 		log.Printf("Failed to set cache: %v", err)
 	}
 	return b
-
 }
 
 // main starts the Fibonacci gRPC server and connects to the Stats service.
 func main() {
-	// parse command line flags
-	flag.Parse()
+	port := os.Getenv("PORT")
+	statsUrl := os.Getenv("STATS_SERVICE_URL")
 	// initialize Redis DB for caching
 	InitRedis()
 	// Connect to Stats gRPC service
-	conn, statsErr := grpc.NewClient(":5002", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, statsErr := grpc.NewClient(statsUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if statsErr != nil {
 		log.Fatalf("Failed to connect to Stats service: %v", statsErr)
 	}
 	defer conn.Close()
 	statsClient = statsPb.NewStatsClient(conn)
-	log.Println("Connected to Stats gRPC service on :5002")
+	log.Printf("Connected to Stats gRPC service on %s", statsUrl)
 
 	// Start Fibonacci gRPC server
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *portPtr))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
-		log.Fatalf("Failed to listen on :5001: %v", err)
+		log.Fatalf("Failed to listen on :%s: %v", port, err)
 	}
 	grpcServer := grpc.NewServer()
 	pb.RegisterFibonacciServer(grpcServer, &fibonacciServer{})
-	log.Printf("Fibonacci gRPC server running on :%d\n", *portPtr)
+	log.Printf("Fibonacci gRPC server running on :%s\n", port)
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve gRPC server: %v", err)

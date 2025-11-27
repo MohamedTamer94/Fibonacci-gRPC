@@ -1,0 +1,35 @@
+services:
+  api-gateway:
+    build: 
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    environment:
+      - PORT=3002
+      - FIBONACCI_SERVICE_URL=fibonacci-service:5001
+      - STATS_SERVICE_URL=stats-service:5002
+    ports:
+      - "3002:3002"
+  stats-service:
+    build:
+      context: .
+      dockerfile: stats-service/Dockerfile
+    environment:
+     - PORT=5002
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+  fibonacci-service:
+    build:
+      context: .
+      dockerfile: fibonacci-service/Dockerfile
+    depends_on:
+      - redis
+    environment:
+     - PORT=5001
+     - STATS_SERVICE_URL=stats-service:5002
+  
+volumes:
+  redis-data:

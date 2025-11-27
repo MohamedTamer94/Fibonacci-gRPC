@@ -13,4 +13,4 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 )
 
-replace fibonacci-grpc/proto => ../proto
+replace fibonacci-grpc/proto => ./proto
